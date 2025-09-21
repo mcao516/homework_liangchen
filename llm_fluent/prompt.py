@@ -54,7 +54,10 @@ class Chain(Generic[T]):
         Returns:
             New chain with transformed items.
         """
-        return Chain(func(item) for item in self._source)
+        def generator():
+            for item in self._source:
+                yield func(item)
+        return Chain(generator())
     
     def filter(self, predicate: Callable[[T], bool]) -> 'Chain[T]':
         """Filter items based on predicate.
@@ -65,7 +68,11 @@ class Chain(Generic[T]):
         Returns:
             New chain with filtered items.
         """
-        return Chain(item for item in self._source if predicate(item))
+        def generator():
+            for item in self._source:
+                if predicate(item):
+                    yield item
+        return Chain(generator())
     
     def take(self, n: int) -> List[T]:
         """Take first n items from the chain.
@@ -116,18 +123,25 @@ class AsyncChain(Generic[T]):
     
     def map(self, func: Callable[[T], U]) -> 'AsyncChain[U]':
         """Transform each item using the given function."""
-        async def _map():
+        async def generator():
             async for item in self._source:
-                yield func(item)
-        return AsyncChain(_map())
+                if asyncio.iscoroutinefunction(func):
+                    yield await func(item)
+                else:
+                    yield func(item)
+        return AsyncChain(generator())
     
     def filter(self, predicate: Callable[[T], bool]) -> 'AsyncChain[T]':
         """Filter items based on predicate."""
-        async def _filter():
+        async def generator():
             async for item in self._source:
-                if predicate(item):
-                    yield item
-        return AsyncChain(_filter())
+                if asyncio.iscoroutinefunction(predicate):
+                    if await predicate(item):
+                        yield item
+                else:
+                    if predicate(item):
+                        yield item
+        return AsyncChain(generator())
     
     async def take(self, n: int) -> List[T]:
         """Take first n items from the chain."""
