@@ -53,7 +53,7 @@ class OpenAIBackend(Backend):
         """Generate response using OpenAI API."""
         try:
             response = self.client.chat.completions.create(
-                model=self.model,
+                model=kwargs.get("model", self.model),
                 messages=[{"role": "user", "content": prompt}],
                 temperature=kwargs.get('temperature', self.temperature),
                 max_tokens=kwargs.get('max_tokens', self.max_tokens)
@@ -67,7 +67,7 @@ class OpenAIBackend(Backend):
         """Asynchronously generate response using OpenAI API."""
         try:
             response = await self.async_client.chat.completions.create(
-                model=self.model,
+                model=kwargs.get("model", self.model),
                 messages=[{"role": "user", "content": prompt}],
                 temperature=kwargs.get('temperature', self.temperature),
                 max_tokens=kwargs.get('max_tokens', self.max_tokens)

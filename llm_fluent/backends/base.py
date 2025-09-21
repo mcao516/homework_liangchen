@@ -11,28 +11,12 @@ class Backend(abc.ABC):
     
     @abc.abstractmethod
     def generate(self, prompt: str, **kwargs) -> str:
-        """Generate a single response from the LLM.
-        
-        Args:
-            prompt: The prompt to send to the LLM.
-            **kwargs: Additional backend-specific parameters.
-            
-        Returns:
-            The LLM's response as a string.
-        """
+        """Generate a single response from the LLM."""
         pass
     
     @abc.abstractmethod
     async def agenerate(self, prompt: str, **kwargs) -> str:
-        """Asynchronously generate a single response from the LLM.
-        
-        Args:
-            prompt: The prompt to send to the LLM.
-            **kwargs: Additional backend-specific parameters.
-            
-        Returns:
-            The LLM's response as a string.
-        """
+        """Asynchronously generate a single response from the LLM."""
         pass
 
 

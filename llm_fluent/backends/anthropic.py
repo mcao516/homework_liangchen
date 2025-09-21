@@ -4,12 +4,6 @@ import logging
 
 from llm_fluent.backends.base import Backend
 
-try:
-    import anthropic
-    ANTHROPIC_AVAILABLE = True
-except ImportError:
-    ANTHROPIC_AVAILABLE = False
-
 logger = logging.getLogger(__name__)
 
 
@@ -20,7 +14,8 @@ class AnthropicBackend(Backend):
         self,
         api_key: str,
         model: str = "claude-3-sonnet-20240229",
-        max_tokens: int = 1000
+        max_tokens: int = 1000,
+        temperature: float = 0.7
     ):
         """Initialize Anthropic backend.
         
@@ -28,21 +23,28 @@ class AnthropicBackend(Backend):
             api_key: API key for authentication.
             model: Model name to use.
             max_tokens: Maximum tokens in response.
+            temperature: Sampling temperature.
         """
-        if not ANTHROPIC_AVAILABLE:
-            raise ImportError("anthropic package is not installed. Run: pip install anthropic")
-        
-        self.client = anthropic.Anthropic(api_key=api_key)
-        self.async_client = anthropic.AsyncAnthropic(api_key=api_key)
+        try:
+            from anthropic import Anthropic, AsyncAnthropic
+        except ImportError:
+            raise ImportError(
+                "Anthropic package not installed. Install with: pip install anthropic"
+            )
+
         self.model = model
         self.max_tokens = max_tokens
-    
+        self.temperature = temperature
+        self.client = Anthropic(api_key=api_key)
+        self.async_client = AsyncAnthropic(api_key=api_key)
+
     def generate(self, prompt: str, **kwargs) -> str:
         """Generate response using Anthropic API."""
         try:
             response = self.client.messages.create(
-                model=self.model,
-                max_tokens=kwargs.get('max_tokens', self.max_tokens),
+                model=kwargs.get("model", self.model),
+                max_tokens=kwargs.get("max_tokens", self.max_tokens),
+                temperature=kwargs.get("temperature", self.temperature),
                 messages=[{"role": "user", "content": prompt}]
             )
             return response.content[0].text
@@ -54,11 +56,11 @@ class AnthropicBackend(Backend):
         """Asynchronously generate response using Anthropic API."""
         try:
             response = await self.async_client.messages.create(
-                model=self.model,
-                max_tokens=kwargs.get('max_tokens', self.max_tokens),
+                model=kwargs.get("model", self.model),
+                max_tokens=kwargs.get("max_tokens", self.max_tokens),
+                temperature=kwargs.get("temperature", self.temperature),
                 messages=[{"role": "user", "content": prompt}]
             )
-            return response.content[0].text
         except Exception as e:
             logger.error(f"Anthropic async generation failed: {e}")
             raise
