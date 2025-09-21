@@ -1,80 +1,183 @@
-# demo.py
+"""A demonstration of the llm-fluent library using OpenRouter."""
+
+"""Fluent-style LLM prompting and response transformation library.
+
+This module provides a fluent interface for working with LLMs, supporting
+multiple backends and both synchronous and asynchronous operations.
+"""
+
 import asyncio
+import logging
 from dataclasses import dataclass
-import os
+from typing import TypeVar
 
-from llm_fluent.backends.openai import OpenAIBackend
-from llm_fluent.prompt import Prompt
+from llm_fluent.backends.base import MockBackend
+from llm_fluent.prompt import Prompt, AsyncPrompt
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# It is recommended to set the OPENROUTER_API_KEY environment variable
-# You can get your key from https://openrouter.ai/keys
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
-BASE_URL = "https://openrouter.ai/api/v1"
+T = TypeVar('T')
+U = TypeVar('U')
 
 
 @dataclass
 class Person:
-    name: str
-    age: int
+    """Example dataclass for extraction."""
+    name: str = ""
+    age: int = 0
 
 
-def main():
-    """Demonstrates the synchronous usage of the llm-fluent library."""
-    print("--- Synchronous Demo ---")
-    backend = OpenAIBackend(
-        base_url=BASE_URL,
-        api_key=OPENROUTER_API_KEY,
-        model="meta-llama/llama-3-8b-instruct",
-    )
-
+def demo_sync():
+    """Demonstrate synchronous usage."""
+    print("=== Synchronous Demo ===\n")
+    
+    # Create mock backend with sample responses
+    responses = [
+        '{"name": "Alice", "age": 30}',
+        '{"name": "Bob", "age": 25}',
+        '{"name": "Charlie", "age": 17}',
+        '{"name": "David", "age": 40}',
+    ]
+    backend = MockBackend(responses)
+    
     corpus = """
-    John is a 30-year-old software engineer.
-    Mary, a 25-year-old doctor, lives in the same town.
-    Peter, aged 17, is a high school student.
+    In our company, we have several employees:
+    Alice is 30 years old and works in engineering.
+    Bob, age 25, is in marketing.
+    Charlie is our 17-year-old intern.
+    David, who is 40, manages the team.
     """
-    prompt_text = f"Find all the people's names and their ages that appear in the corpus:\n{corpus}"
-
+    
+    prompt = f"Extract people's names and ages from:\n{corpus}\nReturn as JSON."
+    
+    # Use the fluent interface
     result = (
-        Prompt(prompt=prompt_text, backend=backend)
+        Prompt(prompt=prompt, backend=backend)
         .sample()
         .extract(Person)
         .filter(lambda p: p.age > 18)
         .take(2)
     )
-
+    
+    print(f"Prompt: {prompt}\n")
+    print("Results (adults only, first 2):")
     for person in result:
-        print(f"Name: {person.name}, Age: {person.age}")
+        print(f"  - {person.name}: {person.age} years old")
 
 
-async def amain():
-    """Demonstrates the asynchronous usage of the llm-fluent library."""
-    print("\n--- Asynchronous Demo ---")
-    backend = OpenAIBackend(
-        base_url=BASE_URL,
-        api_key=OPENROUTER_API_KEY,
-        model="meta-llama/llama-3-8b-instruct",
+async def demo_async():
+    """Demonstrate asynchronous usage."""
+    print("\n=== Asynchronous Demo ===\n")
+    
+    # Create mock backend
+    responses = [
+        '{"name": "Emma", "age": 28}',
+        '{"name": "Frank", "age": 35}',
+        '{"name": "Grace", "age": 16}',
+        '{"name": "Henry", "age": 42}',
+    ]
+    backend = MockBackend(responses)
+    
+    prompt = "Generate a random person with name and age as JSON."
+    
+    # Use the async fluent interface
+    result = await (
+        AsyncPrompt(prompt=prompt, backend=backend)
+        .sample()
+        .extract(Person)
+        .filter(lambda p: p.age >= 21)
+        .take(3)
     )
+    
+    print(f"Prompt: {prompt}\n")
+    print("Results (21+ only, first 3):")
+    for person in result:
+        print(f"  - {person.name}: {person.age} years old")
 
-    corpus = """
-    Alice is a 42-year-old data scientist.
-    Bob, a 19-year-old artist, is her neighbor.
-    Charlie, aged 35, is a project manager.
-    """
-    prompt_text = f"Find all the people's names and their ages that appear in the corpus:\n{corpus}"
 
+def run_tests():
+    """Run basic tests."""
+    print("\n=== Running Tests ===\n")
+    
+    # Test 1: Basic extraction
+    backend = MockBackend(['{"name": "Test", "age": 25}'], cycle=False)
+    result = Prompt("test", backend).sample().extract(Person).take(1)
+    assert len(result) == 1
+    assert result[0].name == "Test"
+    assert result[0].age == 25
+    print("✓ Test 1: Basic extraction passed")
+    
+    # Test 2: Filtering with finite responses
+    backend = MockBackend([
+        '{"name": "Adult", "age": 30}',
+        '{"name": "Minor", "age": 15}',
+        '{"name": "Senior", "age": 65}'
+    ], cycle=False)
+    adults = (
+        Prompt("test", backend, max_iterations=3)
+        .sample()
+        .extract(Person)
+        .filter(lambda p: p.age >= 18)
+        .take(3)
+    )
+    assert len(adults) == 2  # Only Adult and Senior pass the filter
+    assert all(p.age >= 18 for p in adults)
+    print("✓ Test 2: Filtering passed")
+    
+    # Test 3: Mapping
+    backend = MockBackend(['{"name": "John", "age": 25}'], cycle=False)
+    names = (
+        Prompt("test", backend)
+        .sample()
+        .extract(Person)
+        .map(lambda p: p.name.upper())
+        .take(1)
+    )
+    assert names[0] == "JOHN"
+    print("✓ Test 3: Mapping passed")
+    
+    # Test 4: Chain operations with finite data
+    backend = MockBackend([
+        '{"name": "Alice", "age": 30}',
+        '{"name": "Bob", "age": 20}',
+        '{"name": "Charlie", "age": 40}'
+    ], cycle=False)
     result = (
-        await Prompt(prompt=prompt_text, backend=backend)
-        .asample()
-        .aextract(Person)
-        .afilter(lambda p: p.age < 40)
-        .atake(2)
+        Prompt("test", backend, max_iterations=3)
+        .sample()
+        .extract(Person)
+        .filter(lambda p: p.age > 25)
+        .map(lambda p: f"{p.name} ({p.age})")
+        .take(5)  # Ask for 5 but only 2 match
     )
-
-    for person in result:
-        print(f"Name: {person.name}, Age: {person.age}")
+    assert len(result) == 2  # Only Alice and Charlie match
+    assert "Alice (30)" in result
+    assert "Charlie (40)" in result
+    print("✓ Test 4: Chain operations passed")
+    
+    # Test 5: Infinite cycling for production use
+    backend = MockBackend(['{"name": "Cycled", "age": 25}'], cycle=True)
+    result = (
+        Prompt("test", backend)
+        .sample()
+        .extract(Person)
+        .take(3)  # Should get 3 of the same person
+    )
+    assert len(result) == 3
+    assert all(p.name == "Cycled" for p in result)
+    print("✓ Test 5: Infinite cycling passed")
+    
+    print("\n✅ All tests passed!")
 
 
 if __name__ == "__main__":
-    main()
-    asyncio.run(amain())
+    # Run synchronous demo
+    demo_sync()
+    
+    # Run asynchronous demo
+    asyncio.run(demo_async())
+    
+    # Run tests
+    run_tests()
