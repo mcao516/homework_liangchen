@@ -33,6 +33,7 @@ def demo_sync():
     backend = OpenAIBackend(
         base_url="https://openrouter.ai/api/v1",
         api_key=os.environ["OPENROUTER_API_KEY"],
+        model="x-ai/grok-4-fast:free",
     )
     
     corpus = """
@@ -67,6 +68,7 @@ async def demo_async():
     backend = OpenAIBackend(
         base_url="https://openrouter.ai/api/v1",
         api_key=os.environ["OPENROUTER_API_KEY"],
+        model="x-ai/grok-4-fast:free",
     )
     
     corpus = """### Fresh on the Market: A Quick Look at New Tech
