@@ -24,6 +24,7 @@ class Product:
     """Example dataclass for extraction."""
     name: str = ""
     price: float = 0.0
+    model: str = ""
 
 
 def demo_sync():
@@ -45,7 +46,8 @@ def demo_sync():
     We are a great team.
     """
     prompt = f"Extract people's names and ages from:\n{corpus}\nReturn a JSON array."
-    
+    print(f"Prompt: {prompt}\n")
+
     result = (
         Prompt(prompt=prompt, backend=backend)
         .sample()
@@ -55,8 +57,7 @@ def demo_sync():
         .take(3)
     )
     
-    print(f"Prompt: {prompt}\n")
-    print("Extracted people (adults only, first 2):")
+    print("\nExtracted people (adults only, first 2):")
     for person in result:
         print(f"  - {person.name}: {person.age} years old")
 
@@ -87,7 +88,8 @@ From your morning coffee to your creative pursuits, a new lineup of gadgets has 
 *   **"Echo-Scribe" Pen: $75.00**
     For those who love to write by hand, the "Echo-Scribe" seamlessly bridges the gap between analog and digital by instantly saving your handwritten notes to the cloud."""
     prompt = f"""Extract all product names and prices from:\n{corpus}\nReturn a JSON array of objects with two keys: "name" (str) and "price" (float)."""
-    
+    print(f"Prompt: {prompt}\n")
+
     result = await (
         Prompt(prompt=prompt, backend=backend)
         .asample()
@@ -96,8 +98,7 @@ From your morning coffee to your creative pursuits, a new lineup of gadgets has 
         .take(3)
     )
     
-    print(f"Prompt: {prompt}\n")
-    print("Extracted products (price < $150, first 3):")
+    print("\nExtracted products (price < $150, first 3):")
     for product in result:
         print(f"  - {product.name}: ${product.price}")
 
