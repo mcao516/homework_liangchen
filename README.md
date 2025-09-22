@@ -25,9 +25,16 @@ llm_fluent/
 
 ## Installation
 
+To install the project in the virtual environment, navigate to the root directory (where pyproject.toml is located) and run:
+
 ```bash
-pip install openai anthropic  # Backend support
-pip install pydantic  # Optional
+pip install .
+```
+
+To install in editable mode, use the -e flag:
+
+```bash
+pip install -e .
 ```
 
 ## Quick Start

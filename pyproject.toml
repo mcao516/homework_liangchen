@@ -1,23 +1,27 @@
-# pyproject.toml
-[tool.poetry]
-name = "llm-fluent"
-version = "0.1.0"
-description = "A fluent-style LLM prompting and response transformation library."
-authors = ["Meng Cao"]
-license = "MIT"
-readme = "README.md"
-
-[tool.poetry.dependencies]
-python = "^3.10"
-openai = "^1.14.0"
-pydantic = "^2.6.4"
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^8.1.1"
-pytest-asyncio = "^0.23.5"
-python-dotenv = "^1.0.1"
-pytest-mock = "^3.12.0"
-
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "llm_fluent"
+version = "0.1.0"
+description = "A fluent API for interacting with large language models."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+authors = [
+  { name = "Meng Cao", email = "meng.cao@mail.mcgill.ca" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "openai",
+    "anthropic",
+    "pydantic",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
