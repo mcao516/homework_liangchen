@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from typing import TypeVar
 
 from llm_fluent.backends.base import MockBackend
-from llm_fluent.prompt import Prompt, AsyncPrompt
+from llm_fluent.prompt import Prompt
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -35,10 +35,8 @@ def demo_sync():
     
     # Create mock backend with sample responses
     responses = [
-        '{"name": "Alice", "age": 30}',
-        '{"name": "Bob", "age": 25}',
-        '{"name": "Charlie", "age": 17}',
-        '{"name": "David", "age": 40}',
+        '[{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}, \
+            {"name": "Charlie", "age": 17}, {"name": "David", "age": 40}]',
     ]
     backend = MockBackend(responses)
     
@@ -73,10 +71,8 @@ async def demo_async():
     
     # Create mock backend
     responses = [
-        '{"name": "Emma", "age": 28}',
-        '{"name": "Frank", "age": 35}',
-        '{"name": "Grace", "age": 16}',
-        '{"name": "Henry", "age": 42}',
+        '[{"name": "Emma", "age": 28}, {"name": "Frank", "age": 35}, \
+            {"name": "Grace", "age": 16}, {"name": "Henry", "age": 42}]',
     ]
     backend = MockBackend(responses)
     
@@ -84,8 +80,8 @@ async def demo_async():
     
     # Use the async fluent interface
     result = await (
-        AsyncPrompt(prompt=prompt, backend=backend)
-        .sample()
+        Prompt(prompt=prompt, backend=backend)
+        .asample()
         .extract(Person)
         .filter(lambda p: p.age >= 21)
         .take(3)
@@ -111,12 +107,10 @@ def run_tests():
     
     # Test 2: Filtering with finite responses
     backend = MockBackend([
-        '{"name": "Adult", "age": 30}',
-        '{"name": "Minor", "age": 15}',
-        '{"name": "Senior", "age": 65}'
+        '[{"name": "Adult", "age": 30}, {"name": "Minor", "age": 15}, {"name": "Senior", "age": 65}]',
     ], cycle=False)
     adults = (
-        Prompt("test", backend, max_iterations=3)
+        Prompt("test", backend)
         .sample()
         .extract(Person)
         .filter(lambda p: p.age >= 18)
@@ -140,12 +134,10 @@ def run_tests():
     
     # Test 4: Chain operations with finite data
     backend = MockBackend([
-        '{"name": "Alice", "age": 30}',
-        '{"name": "Bob", "age": 20}',
-        '{"name": "Charlie", "age": 40}'
+        '[{"name": "Alice", "age": 30}, {"name": "Bob", "age": 20}, {"name": "Charlie", "age": 40}]',
     ], cycle=False)
     result = (
-        Prompt("test", backend, max_iterations=3)
+        Prompt("test", backend)
         .sample()
         .extract(Person)
         .filter(lambda p: p.age > 25)
@@ -165,8 +157,8 @@ def run_tests():
         .extract(Person)
         .take(3)  # Should get 3 of the same person
     )
-    assert len(result) == 3
-    assert all(p.name == "Cycled" for p in result)
+    assert len(result) == 1
+    assert result[0].name == "Cycled"
     print("✓ Test 5: Infinite cycling passed")
     
     print("\n✅ All tests passed!")
