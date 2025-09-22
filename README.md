@@ -2,6 +2,27 @@
 
 A Python library for fluent-style LLM interactions with built-in extraction, transformation, and retry capabilities.
 
+## Project Structure
+
+```bash
+llm_fluent/
+├── pyproject.toml
+├── README.md
+├── demo.py
+├── src/
+│   └── llm_fluent/
+│       ├── __init__.py
+│       └── backends/
+│           ├── __init__.py
+│           ├── base.py
+│           ├── anthropic.py
+│           └── openai.py
+│       ├── extractor.py
+│       └── prompt.py
+└── tests/
+    └── test_*.py
+```
+
 ## Installation
 
 ```bash
@@ -43,10 +64,16 @@ result = (
 )
 ```
 
-## Run the Demo
+## Run Demo
 
 ```bash
 python demo.py
+```
+
+## Run Tests
+
+```bash
+python -m unittest discover tests
 ```
 
 ## Important Behavior
@@ -56,12 +83,6 @@ python demo.py
 - `map(func)` transforms the response based on a given function
 - `filter(condition)` filters instances based on a condition
 - `take(n)` returns the first n items from current stream
-
-## Testing
-
-```bash
-python -m unittest discover tests
-```
 
 ## License
 

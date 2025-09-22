@@ -5,8 +5,7 @@ import logging
 import os
 from dataclasses import dataclass
 
-from llm_fluent import OpenAIBackend
-from llm_fluent.prompt import Prompt
+from llm_fluent import Prompt, OpenAIBackend
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

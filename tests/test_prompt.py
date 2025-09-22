@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import List
 from unittest.mock import Mock, patch
 
-from llm_fluent.prompt import Prompt
+from llm_fluent import Prompt
 from llm_fluent.backends.base import MockBackend, LLMBackend
 
 
