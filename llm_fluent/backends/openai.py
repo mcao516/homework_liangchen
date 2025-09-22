@@ -4,7 +4,7 @@ import logging
 from typing import Optional
 
 from openai import OpenAI, AsyncOpenAI
-from llm_fluent.backends.base import Backend
+from llm_fluent.backends.base import LLMBackend
 
 try:
     import openai
@@ -15,7 +15,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-class OpenAIBackend(Backend):
+class OpenAIBackend(LLMBackend):
     """OpenAI API compatible backend."""
     
     def __init__(

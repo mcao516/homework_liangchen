@@ -6,7 +6,7 @@ import asyncio
 from typing import Optional, List
 
 
-class Backend(abc.ABC):
+class LLMBackend(abc.ABC):
     """Abstract base class for LLM backends."""
     
     @abc.abstractmethod
@@ -20,7 +20,7 @@ class Backend(abc.ABC):
         pass
 
 
-class MockBackend(Backend):
+class MockBackend(LLMBackend):
     """Mock backend for testing."""
     
     def __init__(self, responses: Optional[List[str]] = None, cycle: bool = True):
@@ -37,8 +37,8 @@ class MockBackend(Backend):
     
     def generate(self, prompt: str, **kwargs) -> str:
         """Return a mock response."""
-        if not self.cycle and self.call_count >= len(self.responses):
-            raise StopIteration("No more mock responses available")
+        # if not self.cycle and self.call_count >= len(self.responses):
+        #     raise StopIteration("No more mock responses available")
         response = self.responses[self.call_count % len(self.responses)]
         self.call_count += 1
         return response

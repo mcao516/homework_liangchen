@@ -2,12 +2,12 @@
 
 import logging
 
-from llm_fluent.backends.base import Backend
+from llm_fluent.backends.base import LLMBackend
 
 logger = logging.getLogger(__name__)
 
 
-class AnthropicBackend(Backend):
+class AnthropicBackend(LLMBackend):
     """Anthropic API backend."""
     
     def __init__(

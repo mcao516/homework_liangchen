@@ -1,13 +1,24 @@
 """Core components for the fluent LLM interface."""
 import asyncio
 import logging
+import inspect
+from dataclasses import dataclass, fields, is_dataclass
 from typing import (
-    Callable, Generic, Iterator, Optional, Type, TypeVar,
-    AsyncIterator, List
+    Any, AsyncIterator, Callable, Generic, Iterator, Optional, 
+    Type, TypeVar, Union, Dict, List
 )
 
-from llm_fluent.backends.base import Backend
+try:
+    from pydantic import BaseModel, ValidationError
+    HAS_PYDANTIC = True
+except ImportError:
+    HAS_PYDANTIC = False
+    BaseModel = None
+    ValidationError = None
+
+from llm_fluent.backends.base import LLMBackend
 from llm_fluent.extract_utils import extract_from_text
+from llm_fluent.extractor import SchemaExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -15,64 +26,49 @@ T = TypeVar('T')
 U = TypeVar('U')
 
 
-# ============================================================================
-# Fluent Chain Classes
-# ============================================================================
-
-class Chain(Generic[T]):
-    """Base class for fluent chains."""
+class FluentChain(Generic[T]):
+    """Base class for fluent chain operations."""
     
     def __init__(self, source: Iterator[T]):
-        """Initialize chain with a source iterator.
+        """Initialize the fluent chain.
         
         Args:
-            source: Iterator that provides values for the chain.
+            source: Source iterator for the chain.
         """
         self._source = source
     
     def __iter__(self) -> Iterator[T]:
-        """Make the chain iterable."""
+        """Return iterator for the chain."""
         return self._source
     
-    def extract(self, schema: Type[U]) -> 'Chain[U]':
-        """Extract structured data from text responses.
+    def map(self, func: Callable[[T], U]) -> 'FluentChain[U]':
+        """Transform each item using the provided function.
         
         Args:
-            schema: Target schema for extraction.
+            func: Transformation function.
             
         Returns:
-            New chain with extracted objects.
-        """
-        return self.map(lambda text: extract_from_text(str(text), schema))
-    
-    def map(self, func: Callable[[T], U]) -> 'Chain[U]':
-        """Transform each item using the given function.
-        
-        Args:
-            func: Function to apply to each item.
-            
-        Returns:
-            New chain with transformed items.
+            New FluentChain with transformed items.
         """
         def generator():
             for item in self._source:
                 yield func(item)
-        return Chain(generator())
+        return FluentChain(generator())
     
-    def filter(self, predicate: Callable[[T], bool]) -> 'Chain[T]':
+    def filter(self, predicate: Callable[[T], bool]) -> 'FluentChain[T]':
         """Filter items based on predicate.
         
         Args:
-            predicate: Function that returns True for items to keep.
+            predicate: Filter function.
             
         Returns:
-            New chain with filtered items.
+            New FluentChain with filtered items.
         """
         def generator():
             for item in self._source:
                 if predicate(item):
                     yield item
-        return Chain(generator())
+        return FluentChain(generator())
     
     def take(self, n: int) -> List[T]:
         """Take first n items from the chain.
@@ -81,58 +77,103 @@ class Chain(Generic[T]):
             n: Number of items to take.
             
         Returns:
-            List of first n items.
+            List of up to n items (may be fewer if stream has fewer items).
         """
         result = []
-        for i, item in enumerate(self._source):
-            if i >= n:
+        for item in self._source:
+            if len(result) >= n:
                 break
             result.append(item)
         return result
+    
+    def extract(
+        self,
+        schema: Union[Type[U], Dict[str, Any]]
+    ) -> 'FluentChain[U]':
+        """Extract structured data from responses.
+        
+        Args:
+            schema: Target schema for extraction.
+            
+        Returns:
+            New FluentChain with extracted objects.
+        """
+        def generator():
+            for item in self._source:
+                if not isinstance(item, str):
+                    item = str(item)
+                
+                # Extract all JSON objects from the response
+                json_objects = SchemaExtractor.extract_all_json_from_text(item)
+                
+                for json_data in json_objects:
+                    try:
+                        if isinstance(schema, dict):
+                            yield json_data
+                        elif is_dataclass(schema):
+                            yield SchemaExtractor.parse_to_dataclass(json_data, schema)
+                        elif HAS_PYDANTIC and inspect.isclass(schema) and issubclass(schema, BaseModel):
+                            yield SchemaExtractor.parse_to_pydantic(json_data, schema)
+                        else:
+                            yield json_data
+                    except (ValueError, TypeError, ValidationError if HAS_PYDANTIC else Exception):
+                        continue
+        
+        return FluentChain(generator())
     
     def collect(self) -> List[T]:
         """Collect all items into a list.
         
         Returns:
             List of all items in the chain.
+        
+        Raises:
+            RuntimeError: If attempting to collect from an infinite stream.
         """
         return list(self._source)
 
 
-class AsyncChain(Generic[T]):
-    """Async version of Chain."""
+class AsyncFluentChain(Generic[T]):
+    """Async version of FluentChain."""
     
     def __init__(self, source: AsyncIterator[T]):
-        """Initialize async chain with an async source iterator."""
+        """Initialize the async fluent chain.
+        
+        Args:
+            source: Source async iterator for the chain.
+        """
         self._source = source
     
     def __aiter__(self) -> AsyncIterator[T]:
-        """Make the chain async iterable."""
+        """Return async iterator for the chain."""
         return self._source
     
-    def extract(self, schema: Type[U]) -> 'AsyncChain[U]':
-        """Extract structured data from text responses.
+    def map(self, func: Callable[[T], U]) -> 'AsyncFluentChain[U]':
+        """Transform each item using the provided function.
         
         Args:
-            schema: Target schema for extraction.
+            func: Transformation function.
             
         Returns:
-            New async chain with extracted objects.
+            New AsyncFluentChain with transformed items.
         """
-        return self.map(lambda text: extract_from_text(str(text), schema))
-    
-    def map(self, func: Callable[[T], U]) -> 'AsyncChain[U]':
-        """Transform each item using the given function."""
         async def generator():
             async for item in self._source:
                 if asyncio.iscoroutinefunction(func):
                     yield await func(item)
                 else:
                     yield func(item)
-        return AsyncChain(generator())
+        return AsyncFluentChain(generator())
     
-    def filter(self, predicate: Callable[[T], bool]) -> 'AsyncChain[T]':
-        """Filter items based on predicate."""
+    def filter(self, predicate: Callable[[T], bool]) -> 'AsyncFluentChain[T]':
+        """Filter items based on predicate.
+        
+        Args:
+            predicate: Filter function.
+            
+        Returns:
+            New AsyncFluentChain with filtered items.
+        """
         async def generator():
             async for item in self._source:
                 if asyncio.iscoroutinefunction(predicate):
@@ -141,128 +182,154 @@ class AsyncChain(Generic[T]):
                 else:
                     if predicate(item):
                         yield item
-        return AsyncChain(generator())
+        return AsyncFluentChain(generator())
     
     async def take(self, n: int) -> List[T]:
-        """Take first n items from the chain."""
+        """Take first n items from the chain.
+        
+        Args:
+            n: Number of items to take.
+            
+        Returns:
+            List of up to n items (may be fewer if stream has fewer items).
+        """
         result = []
-        i = 0
         async for item in self._source:
-            if i >= n:
+            if len(result) >= n:
                 break
             result.append(item)
-            i += 1
         return result
     
-    async def collect(self) -> List[T]:
-        """Collect all items into a list."""
-        return [item async for item in self._source]
-
-
-# ============================================================================
-# Main Prompt Classes
-# ============================================================================
-
-class Prompt:
-    """Synchronous fluent prompt builder."""
-    
-    def __init__(
+    def extract(
         self,
-        prompt: str,
-        backend: Backend,
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
-        max_iterations: Optional[int] = None
-    ):
-        """Initialize prompt with backend.
+        schema: Union[Type[U], Dict[str, Any]]
+    ) -> 'AsyncFluentChain[U]':
+        """Extract structured data from responses.
         
         Args:
-            prompt: The prompt text.
-            backend: Backend to use for generation.
-            max_retries: Maximum retries on failure.
-            retry_delay: Delay between retries in seconds.
-            max_iterations: Maximum number of iterations (None for infinite).
+            schema: Target schema for extraction.
+            
+        Returns:
+            New AsyncFluentChain with extracted objects.
         """
-        self.prompt = prompt
-        self.backend = backend
-        self.max_retries = max_retries
-        self.retry_delay = retry_delay
-        self.max_iterations = max_iterations
+        async def generator():
+            async for item in self._source:
+                if not isinstance(item, str):
+                    item = str(item)
+                
+                # Extract all JSON objects from the response
+                json_objects = SchemaExtractor.extract_all_json_from_text(item)
+                
+                for json_data in json_objects:
+                    try:
+                        if isinstance(schema, dict):
+                            yield json_data
+                        elif is_dataclass(schema):
+                            yield SchemaExtractor.parse_to_dataclass(json_data, schema)
+                        elif HAS_PYDANTIC and inspect.isclass(schema) and issubclass(schema, BaseModel):
+                            yield SchemaExtractor.parse_to_pydantic(json_data, schema)
+                        else:
+                            yield json_data
+                    except (ValueError, TypeError, ValidationError if HAS_PYDANTIC else Exception):
+                        continue
+        
+        return AsyncFluentChain(generator())
     
-    def sample(self) -> Chain[str]:
-        """Create a stream of LLM responses.
+    async def collect(self) -> List[T]:
+        """Collect all items into a list.
         
         Returns:
-            Chain of response strings.
-        """
-        def _generate():
-            iteration = 0
-            while self.max_iterations is None or iteration < self.max_iterations:
-                for attempt in range(self.max_retries):
-                    try:
-                        response = self.backend.generate(self.prompt)
-                        yield response
-                        iteration += 1
-                        break
-                    except StopIteration:
-                        # Backend has no more responses
-                        return
-                    except Exception as e:
-                        if attempt == self.max_retries - 1:
-                            logger.error(f"Max retries exceeded: {e}")
-                            raise
-                        logger.warning(f"Retry {attempt + 1}/{self.max_retries}: {e}")
-                        import time
-                        time.sleep(self.retry_delay)
+            List of all items in the chain.
         
-        return Chain(_generate())
+        Raises:
+            RuntimeError: If attempting to collect from an infinite stream.
+        """
+        result = []
+        async for item in self._source:
+            result.append(item)
+        return result
 
 
-class AsyncPrompt:
-    """Asynchronous fluent prompt builder."""
+class Prompt:
+    """Main entry point for fluent LLM prompting."""
     
     def __init__(
         self,
         prompt: str,
-        backend: Backend,
-        max_retries: int = 3,
-        retry_delay: float = 1.0,
-        max_iterations: Optional[int] = None
+        backend: LLMBackend,
+        extraction_schema: Optional[Union[Type, Dict[str, Any]]] = None
     ):
-        """Initialize async prompt with backend.
+        """Initialize a Prompt.
         
         Args:
-            prompt: The prompt text.
-            backend: Backend to use for generation.
-            max_retries: Maximum retries on failure.
-            retry_delay: Delay between retries in seconds.
-            max_iterations: Maximum number of iterations (None for infinite).
+            prompt: The prompt string.
+            backend: LLM backend to use.
+            extraction_schema: Optional schema for automatic extraction.
         """
         self.prompt = prompt
         self.backend = backend
-        self.max_retries = max_retries
-        self.retry_delay = retry_delay
-        self.max_iterations = max_iterations
-    
-    def sample(self) -> AsyncChain[str]:
-        """Create a stream of LLM responses."""
-        async def _generate():
-            iteration = 0
-            while self.max_iterations is None or iteration < self.max_iterations:
-                for attempt in range(self.max_retries):
-                    try:
-                        response = await self.backend.agenerate(self.prompt)
-                        yield response
-                        iteration += 1
-                        break
-                    except StopIteration:
-                        # Backend has no more responses
-                        return
-                    except Exception as e:
-                        if attempt == self.max_retries - 1:
-                            logger.error(f"Max retries exceeded: {e}")
-                            raise
-                        logger.warning(f"Retry {attempt + 1}/{self.max_retries}: {e}")
-                        await asyncio.sleep(self.retry_delay)
+        self.extraction_schema = extraction_schema
         
-        return AsyncChain(_generate())
+        if extraction_schema:
+            self.prompt = SchemaExtractor.create_extraction_prompt(
+                prompt, extraction_schema
+            )
+    
+    def sample(self, max_iterations: Optional[int] = 1) -> FluentChain[str]:
+        """Generate responses from the LLM.
+        
+        Args:
+            max_iterations: Maximum number of API calls to make (default=1).
+                           Set to None for infinite generation (use with caution).
+                           Note: This is the number of LLM API calls, not the number
+                           of extracted items. Each API call may yield multiple items
+                           when used with extract().
+            
+        Returns:
+            FluentChain of responses.
+        """
+        def generator():
+            iteration = 0
+            while max_iterations is None or iteration < max_iterations:
+                response = self.backend.generate(self.prompt)
+                yield response
+                iteration += 1
+                # If we've reached the limit, stop generating
+                if max_iterations is not None and iteration >= max_iterations:
+                    break
+        
+        return FluentChain(generator())
+    
+    def asample(self, max_iterations: Optional[int] = None) -> AsyncFluentChain[str]:
+        """Asynchronously generate responses in a loop.
+        
+        Args:
+            max_iterations: Maximum number of iterations (None for infinite).
+            
+        Returns:
+            AsyncFluentChain of responses.
+        """
+        async def generator():
+            iteration = 0
+            while max_iterations is None or iteration < max_iterations:
+                response = await self.backend.agenerate(self.prompt)
+                yield response
+                iteration += 1
+        
+        return AsyncFluentChain(generator())
+    
+    def generate(self) -> str:
+        """Generate a single response.
+        
+        Returns:
+            Single response string.
+        """
+        return self.backend.generate(self.prompt)
+    
+    async def agenerate(self) -> str:
+        """Asynchronously generate a single response.
+        
+        Returns:
+            Single response string.
+        """
+        return await self.backend.agenerate(self.prompt)
