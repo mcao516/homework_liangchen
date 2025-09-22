@@ -3,7 +3,7 @@ import asyncio
 import logging
 import time
 import inspect
-from dataclasses import dataclass, fields, is_dataclass
+from dataclasses import is_dataclass
 from typing import (
     Any, AsyncIterator, Callable, Generic, Iterator, Optional, 
     Type, TypeVar, Union, Dict, List
@@ -18,7 +18,6 @@ except ImportError:
     ValidationError = None
 
 from llm_fluent.backends.base import LLMBackend
-from llm_fluent.extract_utils import extract_from_text
 from llm_fluent.extractor import SchemaExtractor
 
 logger = logging.getLogger(__name__)

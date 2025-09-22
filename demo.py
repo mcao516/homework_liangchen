@@ -1,26 +1,16 @@
 """A demonstration of the llm-fluent library using OpenRouter."""
 
-"""Fluent-style LLM prompting and response transformation library.
-
-This module provides a fluent interface for working with LLMs, supporting
-multiple backends and both synchronous and asynchronous operations.
-"""
-
 import asyncio
 import logging
 import os
 from dataclasses import dataclass
-from typing import TypeVar
 
-from llm_fluent import MockBackend, OpenAIBackend, AnthropicBackend
+from llm_fluent import OpenAIBackend
 from llm_fluent.prompt import Prompt
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
-T = TypeVar('T')
-U = TypeVar('U')
 
 
 @dataclass
@@ -52,10 +42,10 @@ def demo_sync():
     Bob, age 25, is in marketing.
     Charlie is our 17-year-old intern.
     David, who is 40, manages the team.
+    We are a great team.
     """
     prompt = f"Extract people's names and ages from:\n{corpus}\nReturn a JSON array."
     
-    # Use the fluent interface
     result = (
         Prompt(prompt=prompt, backend=backend)
         .sample()
@@ -97,7 +87,6 @@ From your morning coffee to your creative pursuits, a new lineup of gadgets has 
     For those who love to write by hand, the "Echo-Scribe" seamlessly bridges the gap between analog and digital by instantly saving your handwritten notes to the cloud."""
     prompt = f"""Extract all product names and prices from:\n{corpus}\nReturn a JSON array of objects with two keys: "name" (str) and "price" (float)."""
     
-    # Use the async fluent interface
     result = await (
         Prompt(prompt=prompt, backend=backend)
         .asample()
@@ -113,8 +102,6 @@ From your morning coffee to your creative pursuits, a new lineup of gadgets has 
 
 
 if __name__ == "__main__":
-    # Run synchronous demo
     demo_sync()
     
-    # Run asynchronous demo
     asyncio.run(demo_async())

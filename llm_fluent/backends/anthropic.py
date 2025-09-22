@@ -26,7 +26,7 @@ class AnthropicBackend(LLMBackend):
             temperature: Sampling temperature.
         """
         try:
-            from anthropic import Anthropic, AsyncAnthropic
+            import anthropic
         except ImportError:
             raise ImportError(
                 "Anthropic package not installed. Install with: pip install anthropic"
@@ -35,8 +35,8 @@ class AnthropicBackend(LLMBackend):
         self.model = model
         self.max_tokens = max_tokens
         self.temperature = temperature
-        self.client = Anthropic(api_key=api_key)
-        self.async_client = AsyncAnthropic(api_key=api_key)
+        self.client = anthropic.Anthropic(api_key=api_key)
+        self.async_client = anthropic.AsyncAnthropic(api_key=api_key)
 
     def generate(self, prompt: str, **kwargs) -> str:
         """Generate response using Anthropic API."""
@@ -61,6 +61,7 @@ class AnthropicBackend(LLMBackend):
                 temperature=kwargs.get("temperature", self.temperature),
                 messages=[{"role": "user", "content": prompt}]
             )
+            return response.content[0].text
         except Exception as e:
             logger.error(f"Anthropic async generation failed: {e}")
             raise

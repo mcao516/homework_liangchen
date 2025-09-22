@@ -1,6 +1,6 @@
 """Unit tests for the Prompt class.
 
-This module contains comprehensive tests for the synchronous Prompt class
+This module contains tests for the synchronous Prompt class
 and its chain operations.
 """
 

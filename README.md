@@ -1,20 +1,68 @@
-# LLM Fluent
+# Fluent LLM Prompting Library
 
-A fluent-style LLM prompting and response transformation library for Python.
-
-This library provides a clean, chainable interface to interact with Large Language Models, process their responses, and extract structured data.
-
-## Features
-
-- **Fluent Interface**: A simple, intuitive API: `.sample().extract().filter().take()`.
-- **Multi-Backend Support**: Designed to work with various LLM providers (e.g., OpenAI, Anthropic).
-- **Structured Data Extraction**: Automatically parse LLM responses into `dataclasses` or `pydantic` models.
-- **Lazy Evaluation**: Operations are performed lazily, making it efficient for sampling and processing large streams of data.
-- **Async Support**: Fully asynchronous version available for high-performance applications.
+A Python library for fluent-style LLM interactions with built-in extraction, transformation, and retry capabilities.
 
 ## Installation
 
-Install the library using pip:
+```bash
+pip install openai anthropic  # Backend support
+pip install pydantic  # Optional
 ```
-pip install "openai>=1.0.0" pydantic
+
+## Quick Start
+
+```python
+from dataclasses import dataclass
+from fluent_llm import Prompt, OpenAIBackend
+
+@dataclass
+class Person:
+    name: str
+    age: int
+
+backend = OpenAIBackend(api_key="your-api-key")
+
+# Extract structured data with fluent chaining
+corpus = """
+In our company, we have several employees:
+Alice is 30 years old and works in engineering.
+Bob, age 25, is in marketing.
+Charlie is our 17-year-old intern.
+David, who is 40, manages the team.
+We are a great team.
+"""
+prompt = f"Extract people's names and ages from:\n{corpus}\nReturn a JSON array."
+
+result = (
+    Prompt(prompt=prompt, backend=backend)
+    .sample()
+    .extract(Person)
+    .filter(lambda p: p.age > 18)
+    .map(lambda p: Person(name=p.name.upper(), age=p.age))
+    .take(3)
+)
 ```
+
+## Run the Demo
+
+```bash
+python demo.py
+```
+
+## Important Behavior
+
+- `sample()` makes exactly the specified number of API calls
+- `extract(schema)` takes a JSON schema, a dataclass, or a pydantic class; extracts info and returns the instance of the required type.
+- `map(func)` transforms the response based on a given function
+- `filter(condition)` filters instances based on a condition
+- `take(n)` returns the first n items from current stream
+
+## Testing
+
+```bash
+python -m unittest discover tests
+```
+
+## License
+
+MIT

@@ -1,8 +1,8 @@
+"""Define a utility class for extracting structured data from text."""
 import json
-import logging
 from dataclasses import fields, is_dataclass
 from typing import (
-    Any, Optional, Type, TypeVar, Union, Dict, List
+    Any, Type, TypeVar, Union, Dict, List
 )
 try:
     from pydantic import BaseModel
@@ -12,45 +12,12 @@ except ImportError:
     BaseModel = None
     ValidationError = None
 
-logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
 
 class SchemaExtractor:
     """Utility class for extracting structured data from text."""
-    
-    @staticmethod
-    def extract_json_from_text(text: str) -> Optional[Dict[str, Any]]:
-        """Extract first JSON object from text, handling markdown code blocks."""
-        # Try direct JSON parsing first
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            pass
-        
-        # Try to find JSON in markdown code blocks
-        import re
-        json_pattern = r'```(?:json)?\s*(\{[\s\S]*?\}|\[[\s\S]*?\])\s*```'
-        matches = re.findall(json_pattern, text)
-        
-        for match in matches:
-            try:
-                return json.loads(match)
-            except json.JSONDecodeError:
-                continue
-        
-        # Try to find raw JSON in text
-        json_pattern = r'(\{[\s\S]*?\}|\[[\s\S]*?\])'
-        matches = re.findall(json_pattern, text)
-        
-        for match in matches:
-            try:
-                return json.loads(match)
-            except json.JSONDecodeError:
-                continue
-        
-        return None
     
     @staticmethod
     def extract_all_json_from_text(text: str) -> List[Dict[str, Any]]:

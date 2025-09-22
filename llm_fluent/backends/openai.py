@@ -3,7 +3,6 @@
 import logging
 from typing import Optional
 
-from openai import OpenAI, AsyncOpenAI
 from llm_fluent.backends.base import LLMBackend
 
 try:
@@ -21,7 +20,7 @@ class OpenAIBackend(LLMBackend):
     def __init__(
         self,
         api_key: str,
-        model: str = "gpt-3.5-turbo",
+        model: str = "gpt-4o-mini",
         base_url: Optional[str] = None,
         temperature: float = 0.7,
         max_tokens: int = 1000
@@ -43,11 +42,11 @@ class OpenAIBackend(LLMBackend):
         self.max_tokens = max_tokens
         
         if base_url:
-            self.client = OpenAI(api_key=api_key, base_url=base_url)
-            self.async_client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+            self.client = openai.OpenAI(api_key=api_key, base_url=base_url)
+            self.async_client = openai.AsyncOpenAI(api_key=api_key, base_url=base_url)
         else:
-            self.client = OpenAI(api_key=api_key)
-            self.async_client = AsyncOpenAI(api_key=api_key)
+            self.client = openai.OpenAI(api_key=api_key)
+            self.async_client = openai.AsyncOpenAI(api_key=api_key)
     
     def generate(self, prompt: str, **kwargs) -> str:
         """Generate response using OpenAI API."""
