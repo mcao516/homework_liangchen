@@ -8,10 +8,11 @@ multiple backends and both synchronous and asynchronous operations.
 
 import asyncio
 import logging
+import os
 from dataclasses import dataclass
 from typing import TypeVar
 
-from llm_fluent.backends.base import MockBackend
+from llm_fluent import MockBackend, OpenAIBackend, AnthropicBackend
 from llm_fluent.prompt import Prompt
 
 # Configure logging
@@ -29,16 +30,21 @@ class Person:
     age: int = 0
 
 
+@dataclass
+class Product:
+    """Example dataclass for extraction."""
+    name: str = ""
+    price: float = 0.0
+
+
 def demo_sync():
     """Demonstrate synchronous usage."""
     print("=== Synchronous Demo ===\n")
     
-    # Create mock backend with sample responses
-    responses = [
-        '[{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}, \
-            {"name": "Charlie", "age": 17}, {"name": "David", "age": 40}]',
-    ]
-    backend = MockBackend(responses)
+    backend = OpenAIBackend(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=os.environ["OPENROUTER_API_KEY"],
+    )
     
     corpus = """
     In our company, we have several employees:
@@ -47,8 +53,7 @@ def demo_sync():
     Charlie is our 17-year-old intern.
     David, who is 40, manages the team.
     """
-    
-    prompt = f"Extract people's names and ages from:\n{corpus}\nReturn as JSON."
+    prompt = f"Extract people's names and ages from:\n{corpus}\nReturn a JSON array."
     
     # Use the fluent interface
     result = (
@@ -56,11 +61,12 @@ def demo_sync():
         .sample()
         .extract(Person)
         .filter(lambda p: p.age > 18)
-        .take(2)
+        .map(lambda p: Person(name=p.name.upper(), age=p.age))
+        .take(3)
     )
     
     print(f"Prompt: {prompt}\n")
-    print("Results (adults only, first 2):")
+    print("Extracted people (adults only, first 2):")
     for person in result:
         print(f"  - {person.name}: {person.age} years old")
 
@@ -69,99 +75,41 @@ async def demo_async():
     """Demonstrate asynchronous usage."""
     print("\n=== Asynchronous Demo ===\n")
     
-    # Create mock backend
-    responses = [
-        '[{"name": "Emma", "age": 28}, {"name": "Frank", "age": 35}, \
-            {"name": "Grace", "age": 16}, {"name": "Henry", "age": 42}]',
-    ]
-    backend = MockBackend(responses)
+    backend = OpenAIBackend(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=os.environ["OPENROUTER_API_KEY"],
+    )
     
-    prompt = "Generate a random person with name and age as JSON."
+    corpus = """### Fresh on the Market: A Quick Look at New Tech
+
+From your morning coffee to your creative pursuits, a new lineup of gadgets has arrived. Here's a glimpse at what's new and what it will cost you.
+
+*   **The "Aura" Smart Mug: $129.99**
+    This mug doesn't just hold your coffee; it keeps it at your ideal temperature for hours and displays personalized images on its digital surface.
+
+*   **"Chrono-Leap" Gaming Console: $599.99**
+    Experience a new dimension of gaming. The "Chrono-Leap" console introduces "4D" gaming, incorporating subtle shifts in room temperature and scent to match your gameplay.
+
+*   **"Bio-Loom" Self-Repairing Fabric: $45 per yard**
+    A revolutionary step in sustainable fashion, this smart textile uses microscopic organisms to slowly weave itself back together when torn.
+
+*   **"Echo-Scribe" Pen: $75.00**
+    For those who love to write by hand, the "Echo-Scribe" seamlessly bridges the gap between analog and digital by instantly saving your handwritten notes to the cloud."""
+    prompt = f"""Extract all product names and prices from:\n{corpus}\nReturn a JSON array of objects with two keys: "name" (str) and "price" (float)."""
     
     # Use the async fluent interface
     result = await (
         Prompt(prompt=prompt, backend=backend)
         .asample()
-        .extract(Person)
-        .filter(lambda p: p.age >= 21)
+        .extract(Product)
+        .filter(lambda p: p.price < 150)
         .take(3)
     )
     
     print(f"Prompt: {prompt}\n")
-    print("Results (21+ only, first 3):")
-    for person in result:
-        print(f"  - {person.name}: {person.age} years old")
-
-
-def run_tests():
-    """Run basic tests."""
-    print("\n=== Running Tests ===\n")
-    
-    # Test 1: Basic extraction
-    backend = MockBackend(['{"name": "Test", "age": 25}'], cycle=False)
-    result = Prompt("test", backend).sample().extract(Person).take(1)
-    assert len(result) == 1
-    assert result[0].name == "Test"
-    assert result[0].age == 25
-    print("✓ Test 1: Basic extraction passed")
-    
-    # Test 2: Filtering with finite responses
-    backend = MockBackend([
-        '[{"name": "Adult", "age": 30}, {"name": "Minor", "age": 15}, {"name": "Senior", "age": 65}]',
-    ], cycle=False)
-    adults = (
-        Prompt("test", backend)
-        .sample()
-        .extract(Person)
-        .filter(lambda p: p.age >= 18)
-        .take(3)
-    )
-    assert len(adults) == 2  # Only Adult and Senior pass the filter
-    assert all(p.age >= 18 for p in adults)
-    print("✓ Test 2: Filtering passed")
-    
-    # Test 3: Mapping
-    backend = MockBackend(['{"name": "John", "age": 25}'], cycle=False)
-    names = (
-        Prompt("test", backend)
-        .sample()
-        .extract(Person)
-        .map(lambda p: p.name.upper())
-        .take(1)
-    )
-    assert names[0] == "JOHN"
-    print("✓ Test 3: Mapping passed")
-    
-    # Test 4: Chain operations with finite data
-    backend = MockBackend([
-        '[{"name": "Alice", "age": 30}, {"name": "Bob", "age": 20}, {"name": "Charlie", "age": 40}]',
-    ], cycle=False)
-    result = (
-        Prompt("test", backend)
-        .sample()
-        .extract(Person)
-        .filter(lambda p: p.age > 25)
-        .map(lambda p: f"{p.name} ({p.age})")
-        .take(5)  # Ask for 5 but only 2 match
-    )
-    assert len(result) == 2  # Only Alice and Charlie match
-    assert "Alice (30)" in result
-    assert "Charlie (40)" in result
-    print("✓ Test 4: Chain operations passed")
-    
-    # Test 5: Infinite cycling for production use
-    backend = MockBackend(['{"name": "Cycled", "age": 25}'], cycle=True)
-    result = (
-        Prompt("test", backend)
-        .sample()
-        .extract(Person)
-        .take(3)  # Should get 3 of the same person
-    )
-    assert len(result) == 1
-    assert result[0].name == "Cycled"
-    print("✓ Test 5: Infinite cycling passed")
-    
-    print("\n✅ All tests passed!")
+    print("Extracted products (price < $150, first 3):")
+    for product in result:
+        print(f"  - {product.name}: ${product.price}")
 
 
 if __name__ == "__main__":
@@ -170,6 +118,3 @@ if __name__ == "__main__":
     
     # Run asynchronous demo
     asyncio.run(demo_async())
-    
-    # Run tests
-    run_tests()

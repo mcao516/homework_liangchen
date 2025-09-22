@@ -118,6 +118,7 @@ class FluentChain(Generic[T]):
                         else:
                             yield json_data
                     except (ValueError, TypeError, ValidationError if HAS_PYDANTIC else Exception):
+                        logger.info("Object cannot be created using schema:", json_data)
                         continue
         
         return FluentChain(generator())
