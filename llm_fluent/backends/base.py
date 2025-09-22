@@ -37,8 +37,8 @@ class MockBackend(LLMBackend):
     
     def generate(self, prompt: str, **kwargs) -> str:
         """Return a mock response."""
-        # if not self.cycle and self.call_count >= len(self.responses):
-        #     raise StopIteration("No more mock responses available")
+        if not self.cycle and self.call_count >= len(self.responses):
+            raise StopIteration("No more mock responses available")
         response = self.responses[self.call_count % len(self.responses)]
         self.call_count += 1
         return response

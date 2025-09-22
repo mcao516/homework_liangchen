@@ -1,6 +1,7 @@
 """Core components for the fluent LLM interface."""
 import asyncio
 import logging
+import time
 import inspect
 from dataclasses import dataclass, fields, is_dataclass
 from typing import (
@@ -275,47 +276,111 @@ class Prompt:
                 prompt, extraction_schema
             )
     
-    def sample(self, max_iterations: Optional[int] = 1) -> FluentChain[str]:
-        """Generate responses from the LLM.
+    def sample(
+        self, 
+        max_iterations: Optional[int] = 1,
+        max_retries: int = 3,
+        retry_delay: float = 1.0
+    ) -> FluentChain[str]:
+        """Generate responses from the LLM with retry logic.
         
         Args:
             max_iterations: Maximum number of API calls to make (default=1).
                            Set to None for infinite generation (use with caution).
-                           Note: This is the number of LLM API calls, not the number
-                           of extracted items. Each API call may yield multiple items
-                           when used with extract().
+            max_retries: Maximum number of retry attempts per API call (default=3).
+            retry_delay: Delay in seconds between retry attempts (default=1.0).
+                        Uses exponential backoff: delay * (2 ** attempt).
             
         Returns:
             FluentChain of responses.
+            
+        Raises:
+            Exception: If all retry attempts fail for a single API call.
         """
         def generator():
             iteration = 0
             while max_iterations is None or iteration < max_iterations:
-                response = self.backend.generate(self.prompt)
-                yield response
-                iteration += 1
+                response = None
+                last_error = None
+                
+                for attempt in range(max_retries + 1):
+                    try:
+                        response = self.backend.generate(self.prompt)
+                        break  # Success, exit retry loop
+                    except Exception as e:
+                        last_error = e
+                        if attempt < max_retries:
+                            # Exponential backoff
+                            sleep_time = retry_delay * (2 ** attempt)
+                            time.sleep(sleep_time)
+                        else:
+                            # All retries exhausted
+                            error_msg = (
+                                f"API call failed after {max_retries + 1} attempts. "
+                                f"Last error: {last_error}"
+                            )
+                            raise Exception(error_msg) from last_error
+                
+                if response is not None:
+                    yield response
+                    iteration += 1
+                
                 # If we've reached the limit, stop generating
                 if max_iterations is not None and iteration >= max_iterations:
                     break
         
         return FluentChain(generator())
     
-    def asample(self, max_iterations: Optional[int] = None) -> AsyncFluentChain[str]:
+    def asample(
+            self,
+            max_iterations: Optional[int] = 1,
+            max_retries: int = 3,
+            retry_delay: float = 1.0  
+        ) -> AsyncFluentChain[str]:
         """Asynchronously generate responses in a loop.
         
         Args:
             max_iterations: Maximum number of iterations (None for infinite).
-            
+            max_retries: Maximum number of retry attempts per API call (default=3).
+            retry_delay: Delay in seconds between retry attempts (default=1.0).
+                        Uses exponential backoff: delay * (2 ** attempt).
+        
         Returns:
             AsyncFluentChain of responses.
         """
         async def generator():
             iteration = 0
-            while max_iterations is None or iteration < max_iterations:
-                response = await self.backend.agenerate(self.prompt)
-                yield response
-                iteration += 1
         
+            while max_iterations is None or iteration < max_iterations:
+                response = None
+                last_error = None
+                
+                for attempt in range(max_retries + 1):
+                    try:
+                        response = await self.backend.agenerate(self.prompt)
+                        break  # Success, exit retry loop
+                    except Exception as e:
+                        last_error = e
+                        if attempt < max_retries:
+                            # Exponential backoff
+                            sleep_time = retry_delay * (2 ** attempt)
+                            time.sleep(sleep_time)
+                        else:
+                            # All retries exhausted
+                            error_msg = (
+                                f"API call failed after {max_retries + 1} attempts. "
+                                f"Last error: {last_error}"
+                            )
+                            raise Exception(error_msg) from last_error
+                
+                if response is not None:
+                    yield response
+                    iteration += 1
+                
+                # If we've reached the limit, stop generating
+                if max_iterations is not None and iteration >= max_iterations:
+                    break
+
         return AsyncFluentChain(generator())
     
     def generate(self) -> str:

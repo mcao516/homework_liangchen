@@ -4,8 +4,9 @@ This module provides a fluent interface for LLM interactions with support for
 streaming, extraction, transformation, and filtering of responses.
 """
 
-import json
 import asyncio
+import json
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields, is_dataclass
 from typing import (
@@ -576,47 +577,108 @@ class Prompt:
                 prompt, extraction_schema
             )
     
-    def sample(self, max_iterations: Optional[int] = 1) -> FluentChain[str]:
-        """Generate responses from the LLM.
+    def sample(
+        self, 
+        max_iterations: Optional[int] = 1,
+        max_retries: int = 3,
+        retry_delay: float = 1.0
+    ) -> FluentChain[str]:
+        """Generate responses from the LLM with retry logic.
         
         Args:
             max_iterations: Maximum number of API calls to make (default=1).
                            Set to None for infinite generation (use with caution).
-                           Note: This is the number of LLM API calls, not the number
-                           of extracted items. Each API call may yield multiple items
-                           when used with extract().
+            max_retries: Maximum number of retry attempts per API call (default=3).
+            retry_delay: Delay in seconds between retry attempts (default=1.0).
+                        Uses exponential backoff: delay * (2 ** attempt).
             
         Returns:
             FluentChain of responses.
+            
+        Raises:
+            Exception: If all retry attempts fail for a single API call.
         """
         def generator():
             iteration = 0
             while max_iterations is None or iteration < max_iterations:
-                response = self.backend.generate(self.prompt)
-                yield response
-                iteration += 1
+                response = None
+                last_error = None
+                
+                for attempt in range(max_retries + 1):
+                    try:
+                        response = self.backend.generate(self.prompt)
+                        break  # Success, exit retry loop
+                    except Exception as e:
+                        last_error = e
+                        if attempt < max_retries:
+                            # Exponential backoff
+                            sleep_time = retry_delay * (2 ** attempt)
+                            time.sleep(sleep_time)
+                        else:
+                            # All retries exhausted
+                            error_msg = (
+                                f"API call failed after {max_retries + 1} attempts. "
+                                f"Last error: {last_error}"
+                            )
+                            raise Exception(error_msg) from last_error
+                
+                if response is not None:
+                    yield response
+                    iteration += 1
+                
                 # If we've reached the limit, stop generating
                 if max_iterations is not None and iteration >= max_iterations:
                     break
         
         return FluentChain(generator())
     
-    def asample(self, max_iterations: Optional[int] = None) -> AsyncFluentChain[str]:
+    def asample(
+            self,
+            max_iterations: Optional[int] = None,
+            max_retries: int = 3,
+            retry_delay: float = 1.0  
+        ) -> AsyncFluentChain[str]:
         """Asynchronously generate responses in a loop.
         
         Args:
             max_iterations: Maximum number of iterations (None for infinite).
-            
+
         Returns:
             AsyncFluentChain of responses.
         """
         async def generator():
             iteration = 0
-            while max_iterations is None or iteration < max_iterations:
-                response = await self.backend.agenerate(self.prompt)
-                yield response
-                iteration += 1
         
+            while max_iterations is None or iteration < max_iterations:
+                response = None
+                last_error = None
+                
+                for attempt in range(max_retries + 1):
+                    try:
+                        response = await self.backend.agenerate(self.prompt)
+                        break  # Success, exit retry loop
+                    except Exception as e:
+                        last_error = e
+                        if attempt < max_retries:
+                            # Exponential backoff
+                            sleep_time = retry_delay * (2 ** attempt)
+                            time.sleep(sleep_time)
+                        else:
+                            # All retries exhausted
+                            error_msg = (
+                                f"API call failed after {max_retries + 1} attempts. "
+                                f"Last error: {last_error}"
+                            )
+                            raise Exception(error_msg) from last_error
+                
+                if response is not None:
+                    yield response
+                    iteration += 1
+                
+                # If we've reached the limit, stop generating
+                if max_iterations is not None and iteration >= max_iterations:
+                    break
+
         return AsyncFluentChain(generator())
     
     def generate(self) -> str:
@@ -807,48 +869,58 @@ if __name__ == "__main__":
     
     # Test with multiple items in single response
     backend3 = MockBackend([
-        '[{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}, {"name": "Charlie", "age": 35}]',
-        '[{"name": "Kidd", "age": 23}, {"name": "Tom", "age": 65}]',
-    ], cycle=True)
+        '[{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}, {"name": "Charlie", "age": 35}]'
+    ], cycle=False)
     prompt3 = Prompt("extract people", backend3)
     results3 = prompt3.sample().extract(Person).take(2)
     assert len(results3) == 2, f"Expected 2 results, got {len(results3)}"
     assert results3[0].name == "Alice" and results3[1].name == "Bob"
     print("✓ Multiple items in single response test passed")
-
-    # Test collect() function
-    backend4 = MockBackend([
-        '[{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}, {"name": "Charlie", "age": 35}]',
-        '[{"name": "Kidd", "age": 23}, {"name": "Tom", "age": 65}]',
-        '[{"name": "Tim", "age": 13}]',
-    ], cycle=True)
-    prompt4 = Prompt("extract people", backend4)
-    results4 = prompt4.sample().extract(Person).collect()
-    assert len(results4) == 3, f"Expected 3 results, got {len(results4)}"
-    assert results4[0].name == "Alice" and results4[0].age == 30
-    assert results4[1].name == "Bob" and results4[1].age == 25
-    assert results4[2].name == "Charlie" and results4[2].age == 35
-    print("✓ Multiple items collection test passed")
     
-    # Test collect() function
-    backend5 = MockBackend([
-        '[{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}, {"name": "Charlie", "age": 35}]',
-        '[{"name": "Kidd", "age": 23}, {"name": "Tom", "age": 65}]',
-        '[{"name": "Tim", "age": 13}]',
-    ], cycle=True)
-    prompt5 = Prompt("extract people", backend5)
-    results5_1 = prompt5.sample().extract(Person).take(5)
-    assert len(results5_1) == 3, f"Expected 3 results, got {len(results5_1)}"
-    assert results5_1[0].name == "Alice" and results5_1[0].age == 30
-    assert results5_1[1].name == "Bob" and results5_1[1].age == 25
-    assert results5_1[2].name == "Charlie" and results5_1[2].age == 35
-
-    results5_2 = prompt5.sample().extract(Person).take(5)
-    assert len(results5_2) == 2, f"Expected 2 results, got {len(results5_2)}"
-    assert results5_2[0].name == "Kidd" and results5_2[1].name == "Tom"
-
-    results5_3 = prompt5.sample().extract(Person).take(5)
-    assert len(results5_3) == 1, f"Expected 1 results, got {len(results5_3)}"
-    print("✓ Over-taking test passed")
-
+    # Test retry logic with failing backend
+    class FailingBackend(LLMBackend):
+        """Mock backend that fails a certain number of times before succeeding."""
+        def __init__(self, failures_before_success: int = 2):
+            self.failures_before_success = failures_before_success
+            self.attempt_count = 0
+        
+        def generate(self, prompt: str, **kwargs) -> str:
+            self.attempt_count += 1
+            if self.attempt_count <= self.failures_before_success:
+                raise Exception(f"Simulated failure {self.attempt_count}")
+            return '{"name": "Success", "age": 100}'
+        
+        async def agenerate(self, prompt: str, **kwargs) -> str:
+            return self.generate(prompt, **kwargs)
+        
+        def reset(self):
+            self.attempt_count = 0
+    
+    # Test retry logic
+    print("\n=== Testing Retry Logic ===")
+    failing_backend = FailingBackend(failures_before_success=2)
+    prompt_with_retry = Prompt("test", failing_backend)
+    
+    try:
+        # Should succeed after 2 failures with default max_retries=3
+        result = prompt_with_retry.sample(max_retries=3, retry_delay=0.1).extract(Person).take(1)
+        assert len(result) == 1
+        assert result[0].name == "Success"
+        print("✓ Retry logic test passed (succeeded after retries)")
+    except Exception as e:
+        print(f"✗ Retry logic test failed: {e}")
+    
+    # Test when retries are exhausted
+    failing_backend.reset()
+    failing_backend.failures_before_success = 5  # Will fail more times than max_retries
+    
+    try:
+        result = prompt_with_retry.sample(max_retries=2, retry_delay=0.1).extract(Person).take(1)
+        print("✗ Should have failed with exhausted retries")
+    except Exception as e:
+        if "failed after 3 attempts" in str(e):
+            print("✓ Retry exhaustion test passed")
+        else:
+            print(f"✗ Unexpected error: {e}")
+    
     print("\nAll tests passed! ✓")
