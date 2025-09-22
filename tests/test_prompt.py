@@ -13,6 +13,13 @@ from unittest.mock import Mock, patch
 from llm_fluent import Prompt
 from llm_fluent.backends.base import MockBackend, LLMBackend
 
+try:
+    from pydantic import BaseModel
+    HAS_PYDANTIC = True
+except ImportError:
+    HAS_PYDANTIC = False
+    BaseModel = None
+
 
 @dataclass
 class Person:
@@ -190,6 +197,48 @@ class TestPrompt(unittest.TestCase):
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].name, "Only")
         self.assertEqual(results[0].age, 25)
+
+    def test_extraction_with_json_schema(self):
+        """Test 14: Properly extract given a json scheme."""
+        json_schema = {"item_name": "string", "item_id": "integer"}
+        backend = MockBackend([
+            '[{"item_name": "Test Item", "item_id": 987, "is_active": true}]'
+        ], cycle=False)
+        prompt = Prompt("test", backend)
+        
+        # Try to take more than available
+        results = prompt.sample().extract(json_schema).collect()
+        
+        # Should only get 1 result
+        self.assertEqual(len(results), 1)
+        self.assertTrue(isinstance(results[0], dict))
+        self.assertEqual(results[0]["item_name"], "Test Item")
+        self.assertEqual(results[0]["item_id"], 987)
+        self.assertTrue(results[0]["is_active"])
+
+    def test_extraction_with_pydantic_schema(self):
+        """Test 15: Properly extract given a pydantic scheme."""
+        if HAS_PYDANTIC:
+            class Product(BaseModel):
+                name: str
+                price: float
+                in_stock: bool
+
+            mock_response_pydantic = '{"name": "Super Widget", "price": 19.99, "in_stock": true, "extra_field": "should be ignored"}'
+            
+            backend_for_pydantic = MockBackend([mock_response_pydantic])
+            prompt_for_pydantic = Prompt("extract product", backend_for_pydantic)
+
+            result_pydantic = prompt_for_pydantic.sample().extract(Product).collect()
+
+            self.assertEqual(len(result_pydantic), 1)
+            extracted_product = result_pydantic[0]
+            self.assertTrue(isinstance(extracted_product, Product))
+            self.assertEqual(extracted_product.name, "Super Widget")
+            self.assertEqual(extracted_product.price, 19.99)
+            self.assertTrue(not hasattr(extracted_product, "extra_field"))
+        else:
+            print("! Pydantic not installed, skipping Pydantic schema extraction test")
 
 
 class TestAsyncPrompt(unittest.TestCase):
